@@ -3,7 +3,7 @@
 modprobe libcomposite
 
 hid_conf_directory="/sys/kernel/config/usb_gadget/sakurakvmd"
-dev_name="musb-hdrc.4.auto"
+dev_name="musb-hdrc.2.auto"
 
 create_hid() {
     # create gadget

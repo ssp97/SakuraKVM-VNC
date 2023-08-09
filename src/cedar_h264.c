@@ -285,10 +285,11 @@ int cedar_hardware_init(unsigned int width, unsigned int height, unsigned int fp
     baseConfig.nDstHeight = height;
 
     // Our input format is YUV422 multi plane (YM16) from sunxi-csi
-    baseConfig.eInputFormat = VENC_PIXEL_YUV422SP;
+    // for USB Capture, input format is YUYV422.
+    baseConfig.eInputFormat = VENC_PIXEL_YUYV422;
 
-    bufferParam.nSizeY = baseConfig.nInputWidth*baseConfig.nInputHeight;
-    bufferParam.nSizeC = baseConfig.nInputWidth*baseConfig.nInputHeight;
+    bufferParam.nSizeY = baseConfig.nInputWidth*baseConfig.nInputHeight * 2;
+    bufferParam.nSizeC = 0;
     bufferParam.nBufferNum = 3;
 
     g_max_nSizeY = bufferParam.nSizeY;

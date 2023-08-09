@@ -152,14 +152,14 @@ int csi_capture_init(unsigned int width, unsigned int height)
 	if(caps.capabilities & V4L2_CAP_STREAMING)     LOGI("- STREAMING");
 	if(caps.capabilities & V4L2_CAP_TIMEPERFRAME)  LOGI("- TIMEPERFRAME");
 
-    list_formats(g_videodev_fd, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
+    list_formats(g_videodev_fd, V4L2_BUF_TYPE_VIDEO_CAPTURE);
 
     // Sunxi CSI is a MPlane device
-    fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+    fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     fmt.fmt.pix.width = width;
     fmt.fmt.pix.height = height;
     // We excepted YUV422 MPlane format, this is also named YUV422SP format
-    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUV422M;
+    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
     fmt.fmt.pix.field = V4L2_FIELD_ANY;
 
     if (0 != xioctl(g_videodev_fd, VIDIOC_S_FMT, &fmt))
@@ -170,7 +170,7 @@ int csi_capture_init(unsigned int width, unsigned int height)
 
     // Now request the buffer
     req.count = 3;
-    req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+    req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     req.memory = V4L2_MEMORY_DMABUF;
 
     if (0 != xioctl(g_videodev_fd, VIDIOC_REQBUFS, &req))
@@ -184,11 +184,14 @@ int csi_capture_init(unsigned int width, unsigned int height)
     memset(g_v4l2_buf, 0, sizeof(struct v4l2_buffer));
     memset(g_v4l2_planes_buffer, 0, sizeof(g_v4l2_planes_buffer));
     for(i = 0; i < req_count; i++) {
-        g_v4l2_buf[i].type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+        g_v4l2_buf[i].type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         g_v4l2_buf[i].memory = V4L2_MEMORY_DMABUF;
-        g_v4l2_buf[i].m.planes = g_v4l2_planes_buffer[i];
-        g_v4l2_buf[i].length = fmt.fmt.pix_mp.num_planes;
+        //g_v4l2_buf[i].m.planes = g_v4l2_planes_buffer[i];
+        //g_v4l2_buf[i].length = fmt.fmt.pix_mp.num_planes;
+        g_v4l2_buf[i].length = 1920*1080*2;
         g_v4l2_buf[i].index = i;
+
+        g_v4l2_planes_buffer[i][0].length = g_v4l2_buf[i].length;
 
         if (-1 == ioctl (g_videodev_fd, VIDIOC_QUERYBUF, &g_v4l2_buf[i])) {
             LOGE("Query video device buffer failed");
@@ -196,31 +199,35 @@ int csi_capture_init(unsigned int width, unsigned int height)
         }
     }
 
-    g_num_plane = fmt.fmt.pix_mp.num_planes;
+    g_num_plane = 1;//fmt.fmt.pix_mp.num_planes;
     
     return 0;
 }
 
 int csi_capture_queuebuf(int **buffer)
 {
-    int i, j;
+    int i;
 
     memset(&g_v4l2_buf, 0, sizeof(struct v4l2_buffer));
     for (i = 0; i < req_count; i++) {
 
-        g_v4l2_buf[i].type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+        g_v4l2_buf[i].type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         g_v4l2_buf[i].memory = V4L2_MEMORY_DMABUF;
-        g_v4l2_buf[i].length = g_num_plane;
+        //g_v4l2_buf[i].length = g_num_plane;
         g_v4l2_buf[i].index = i;
         g_v4l2_buf[i].m.planes = g_v4l2_planes_buffer[i];
 
-        for (j = 0; j < g_num_plane; j++) {
-            g_v4l2_buf[i].m.planes[j].m.fd = buffer[i][j];
-            g_v4l2_buf[i].m.planes[j].length = g_v4l2_planes_buffer[i][j].length;
-            g_v4l2_buf[i].m.planes[j].bytesused = 0;
+        g_v4l2_buf[i].m.fd = buffer[i][0];
+        g_v4l2_buf[i].length = g_v4l2_planes_buffer[i][0].length;
+        g_v4l2_buf[i].bytesused = 0;
+        LOGD("csi: queue buf, plane[%d] fd = %d, length = %d", 0, g_v4l2_buf[i].m.fd, g_v4l2_planes_buffer[i][0].length);
+        // for (j = 0; j < g_num_plane; j++) {
+        //     g_v4l2_buf[i].m.planes[j].m.fd = buffer[i][j];
+        //     g_v4l2_buf[i].m.planes[j].length = g_v4l2_planes_buffer[i][j].length;
+        //     g_v4l2_buf[i].m.planes[j].bytesused = 0;
 
-            LOGD("csi: queue buf, plane[%d] fd = %d, length = %d", j, g_v4l2_buf[i].m.planes[j].m.fd, g_v4l2_planes_buffer[i][j].length);
-        }
+        //     LOGD("csi: queue buf, plane[%d] fd = %d, length = %d", j, g_v4l2_buf[i].m.planes[j].m.fd, g_v4l2_planes_buffer[i][j].length);
+        // }
 
         LOGD("csi: queue buffer req %d", i);
 
@@ -236,7 +243,7 @@ int csi_capture_queuebuf(int **buffer)
 
 int csi_capture_start(void)
 {
-	enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     if(0 != xioctl(g_videodev_fd, VIDIOC_STREAMON, &type))
     {
         LOGE("Start video device stream failed");
@@ -268,7 +275,7 @@ int csi_capture_frame_yuv422sp(int *buf_id)
 
 	LOGV("csi capture: retrieving frame...");
     memset(&g_buf, 0, sizeof(g_buf));
-    g_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+    g_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     g_buf.memory = V4L2_MEMORY_DMABUF;
     g_buf.m.planes = g_tmp_plane;
     g_buf.length = g_num_plane;
@@ -289,9 +296,14 @@ int csi_capture_queuebuf_again(int *buffer)
 
     for(i = 0; i < g_num_plane; i++)
     {
-        g_buf.m.planes[i].m.fd = buffer[i];
-        g_buf.m.planes[i].length = g_v4l2_planes_buffer[g_buf.index][i].length;
-        g_buf.m.planes[i].bytesused = 0;
+        //g_buf.m.planes[i].m.fd = buffer[i];
+        //g_buf.m.planes[i].length = g_v4l2_planes_buffer[g_buf.index][i].length;
+        //g_buf.m.planes[i].bytesused = 0;
+        g_buf.index = i;
+        g_buf.m.fd = buffer[i];
+        g_buf.length = g_v4l2_planes_buffer[g_buf.index][i].length;
+        g_buf.bytesused = 0;
+        //LOGI("length = %d", g_buf.length);
     }
 
     if (xioctl(g_videodev_fd, VIDIOC_QBUF, &g_buf) < 0)
